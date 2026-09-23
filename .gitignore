@@ -1,0 +1,21 @@
+# Thư mục build và cấu hình cá nhân của STM32CubeIDE
+Debug/
+Release/
+.settings/
+.metadata/
+*.launch
+
+# Các file trung gian sinh ra khi biên dịch (không cần đưa lên Git)
+*.o
+*.d
+*.elf
+*.bin
+*.hex
+*.map
+*.list
+*.su
+*.bak
+
+# File rác của hệ điều hành
+.DS_Store
+Thumbs.db
