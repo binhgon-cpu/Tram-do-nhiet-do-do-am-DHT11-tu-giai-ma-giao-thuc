@@ -2,28 +2,30 @@
 
 extern TIM_HandleTypeDef htim2; // goi timer 2 tu main.c
 
-// 1. Ham delay micro giay
+//Ham delay us
 void delay_us(uint16_t us) {
     __HAL_TIM_SET_COUNTER(&htim2, 0);
     while (__HAL_TIM_GET_COUNTER(&htim2) < us);
 }
 
-// 2. Ham chuyen chan GPIO thanh Output
+//Chuyen chan GPIO thanh Output
 void Set_Pin_Output(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin) {
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-    GPIO_InitStruct.Pin = GPIO_Pin;
-    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-    HAL_GPIO_Init(GPIOx, &GPIO_InitStruct);
+	 GPIO_InitTypeDef GPIO_InitStruct = {0};
+	 GPIO_InitStruct.Pin = GPIO_Pin;
+	 GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
+	 GPIO_InitStruct.Pull = GPIO_NOPULL;
+	 GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+	 HAL_GPIO_Init(GPIOx, &GPIO_InitStruct);
 }
 
 // 3. Ham chuyen chan GPIO thanh Input
 void Set_Pin_Input(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin) {
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-    GPIO_InitStruct.Pin = GPIO_Pin;
-    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-    GPIO_InitStruct.Pull = GPIO_PULLUP;
-    HAL_GPIO_Init(GPIOx, &GPIO_InitStruct);
+	 GPIO_InitTypeDef GPIO_InitStruct = {0};
+  	GPIO_InitStruct.Pin = GPIO_Pin;
+  	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+	GPIO_InitStruct.Pull = GPIO_NOPULL;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+	HAL_GPIO_Init(GPIOx, &GPIO_InitStruct);
 }
 
 // 4. Ham đoc va giai ma DHT11
