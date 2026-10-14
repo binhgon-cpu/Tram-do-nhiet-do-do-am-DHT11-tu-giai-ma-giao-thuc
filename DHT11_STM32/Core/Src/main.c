@@ -24,7 +24,7 @@
 
 #include "dht11.h"
 #include "i2c-lcd.h"
-#include <stdio.h> // �e d�ng h�m sprintf gh�p chuoi hien thi
+#include <stdio.h> // e dng hm sprintf ghp chuoi hien thi
 #include "dht11_warning.h"
 /* USER CODE END Includes */
 
@@ -49,8 +49,10 @@ I2C_HandleTypeDef hi2c1;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 
+UART_HandleTypeDef huart1;
+
 /* USER CODE BEGIN PV */
-// Tao mang 8 byte ve bieu tuong (� C) cho CGRAM
+// Tao mang 8 byte ve bieu tuong ( C) cho CGRAM
 uint8_t Custom_Degree[8] = {
     0x06,
     0x09, 
@@ -77,6 +79,7 @@ static void MX_GPIO_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_TIM3_Init(void);
+static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -108,8 +111,7 @@ int main(void)
 
   /* Configure the system clock */
   SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
+/* USER CODE BEGIN SysInit */
 
   /* USER CODE END SysInit */
 
@@ -118,6 +120,7 @@ int main(void)
   MX_TIM2_Init();
   MX_I2C1_Init();
   MX_TIM3_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 HAL_TIM_Base_Start(&htim2);
 
@@ -133,83 +136,99 @@ HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
   while (1)
   {
-		// 1. �oc du lieu DHT11
-      if (DHT11_Read(&nhiet_do, &do_am) == 0) { // 0 l� th�nh c�ng OK
-          
-          // Cap nhat gi� tri Min / Max Nhiet do va �o am
+      // 1. Quét nút bấm tăng/giảm ngưỡng cài đặt (PA2 & PA3)
+      Scan_Buttons();
+
+      // 2. Đọc dữ liệu từ DHT11 (0 là THÀNH CÔNG theo file dht11.c)
+      if (DHT11_Read(&nhiet_do, &do_am) == 0) 
+      { 
+          // Cập nhật giá trị Min / Max
           if (nhiet_do < temp_min) temp_min = nhiet_do;
           if (nhiet_do > temp_max) temp_max = nhiet_do;
           if (do_am < hum_min) hum_min = do_am;
           if (do_am > hum_max) hum_max = do_am;
-if (nhiet_do >= 35) { // Ngưỡng quá nhiệt (ví dụ >= 35 độ C)
-              // 1. Bật còi hú (Chân GPIO Còi)
-              HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET); 
-              
-              // 2. Nháy LED RGB màu Đỏ (Đổi Duty cycle PWM channel 1)
-              __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 999); // Màu Đỏ sáng
-              __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, 0);   // Xanh lá tắt
-              __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 0);   // Xanh dương tắt
+
+          // --- XỬ LÝ CẢNH BÁO LED RGB VÀ CÒI (PB1) ---
+          if (nhiet_do >= threshold_temp) 
+          { 
+              // Quá ngưỡng: Còi kêu (PB1) + LED RGB Đỏ sáng
+              HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_SET); 
+              Set_RGB_Color(65535, 0, 0); // Đỏ
           } 
-          else {
-              // Nhiệt độ bình thường: Tắt còi, LED RGB sáng xanh lá
-              HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
-              
-              __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0);   // Đỏ tắt
-              __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, 999); // Xanh lá sáng
-              __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 0);   // Xanh dương tắt
+          else if (nhiet_do >= (threshold_temp - 2))
+          {
+              // Sát ngưỡng: Tắt còi + LED RGB Vàng
+              HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
+              Set_RGB_Color(65535, 20000, 0); // Vàng
           }
-          // 2. Chuyen trang sau moi 5 GI�Y
+          else 
+          {
+              // Bình thường: Tắt còi + LED RGB Xanh lá
+              HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
+              Set_RGB_Color(0, 65535, 0); // Xanh lá
+          }
+
+          // --- BỔ SUNG NHIỆM VỤ 4: UART log định kỳ dạng CSV ---
+          char uart_buff[64];
+          int len = sprintf(uart_buff, "%d,%d,%d\r\n", nhiet_do, do_am, threshold_temp);
+          HAL_UART_Transmit(&huart1, (uint8_t*)uart_buff, len, 100);
+          // -----------------------------------------------------
+
+          // 3. Chuyển trang màn hình LCD sau mỗi 5 GIÂY
           if (HAL_GetTick() - last_page_change > 5000) {
-              display_page = !display_page; // �oi trang 0 <-> 1
+              display_page = !display_page; // Đổi trang 0 <-> 1
               last_page_change = HAL_GetTick();
               lcd_clear();
           }
 
-          //  Trang 0: Hien thi Nhiet do & �o ?am thoi gian thuc ---
+          // --- Trang 0: Hiển thị Nhiệt độ, Độ ẩm & Ngưỡng ---
           if (display_page == 0) {
-              // D�ng 1: Temp: XX�C
+              // Dòng 1: T:XXC (Set:YYC)
               lcd_put_cur(0, 0);
-              sprintf(lcd_buff, "Nhiet do: %2d.0", nhiet_do);
+              sprintf(lcd_buff, "T:%2d", nhiet_do);
               lcd_send_string(lcd_buff);
-              lcd_send_data(0); // In k� tu (�C)
-              lcd_send_string("C");
+              lcd_send_data(0); // Ký tự °C
+              sprintf(lcd_buff, "C (Set:%2dC)", threshold_temp);
+              lcd_send_string(lcd_buff);
 
-              // D�ng 2: Humi: XX%
+              // Dòng 2: Do am : XX%
               lcd_put_cur(1, 0);
-              sprintf(lcd_buff, "Do am   : %2d.0%% ", do_am);
+              sprintf(lcd_buff, "Do am   : %2d%%   ", do_am);
               lcd_send_string(lcd_buff);
           } 
-          // --- TRANG 1: Hien thi gi� tri MIN / MAX ---
+          // --- Trang 1: Hiển thị giá trị MIN / MAX ---
           else {
-              // D�ng 1: T: Min-Max �C
               lcd_put_cur(0, 0);
-              sprintf(lcd_buff, "T:%2d- %2d", temp_min, temp_max);
+              sprintf(lcd_buff, "T: %2d - %2d", temp_min, temp_max);
               lcd_send_string(lcd_buff);
-              lcd_send_data(0); 
-              lcd_send_string("C ");
+              lcd_send_data(0);
+              lcd_send_string("C  ");
 
-              // D�ng 2: H: Min-Max %
               lcd_put_cur(1, 0);
-              sprintf(lcd_buff, "H:%2d- %2d %% ", hum_min, hum_max);
+              sprintf(lcd_buff, "H: %2d - %2d %%   ", hum_min, hum_max);
               lcd_send_string(lcd_buff);
           }
 
-      } else {
-          // B�o loi r�t d�y / Timeout / Sai Checksum
+      } 
+      else 
+      {
+          // Báo lỗi cảm biến khi DHT11_Read trả về khác 0 (1 hoặc 2)
           lcd_put_cur(0, 0);
-          lcd_send_string("LOI CAM BIEN!  ");
+          lcd_send_string("LOI CAM BIEN!   ");
           lcd_put_cur(1, 0);
           lcd_send_string("KIEM TRA DAY... ");
       }
 
-      HAL_Delay(1000); // Cap nhau sau moi 1 gi�y
-		
+      HAL_Delay(200); // Trễ 200ms để bấm nút phản hồi nhạy
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	
+		}
   /* USER CODE END 3 */
 }
 
@@ -302,8 +321,7 @@ static void MX_TIM2_Init(void)
   TIM_MasterConfigTypeDef sMasterConfig = {0};
 
   /* USER CODE BEGIN TIM2_Init 1 */
-
-  /* USER CODE END TIM2_Init 1 */
+/* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 71;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
@@ -399,6 +417,39 @@ static void MX_TIM3_Init(void)
 }
 
 /**
+  * @brief USART1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART1_Init 0 */
+
+  /* USER CODE END USART1_Init 0 */
+
+  /* USER CODE BEGIN USART1_Init 1 */
+
+  /* USER CODE END USART1_Init 1 */
+  huart1.Instance = USART1;
+  huart1.Init.BaudRate = 115200;
+  huart1.Init.WordLength = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits = UART_STOPBITS_1;
+  huart1.Init.Parity = UART_PARITY_NONE;
+  huart1.Init.Mode = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART1_Init 2 */
+
+  /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -416,17 +467,10 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(DHT11_PIN_GPIO_Port, DHT11_PIN_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1|DTH11_PIN_Pin, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin : DHT11_PIN_Pin */
-  GPIO_InitStruct.Pin = DHT11_PIN_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(DHT11_PIN_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_WritePin(DHT11_PIN_GPIO_Port, DHT11_PIN_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : PA2 PA3 */
   GPIO_InitStruct.Pin = GPIO_PIN_2|GPIO_PIN_3;
@@ -434,12 +478,19 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PB1 DTH11_PIN_Pin */
-  GPIO_InitStruct.Pin = GPIO_PIN_1|DTH11_PIN_Pin;
+  /*Configure GPIO pin : PA12 */
+  GPIO_InitStruct.Pin = GPIO_PIN_12;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : DHT11_PIN_Pin */
+  GPIO_InitStruct.Pin = DHT11_PIN_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(DHT11_PIN_GPIO_Port, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
