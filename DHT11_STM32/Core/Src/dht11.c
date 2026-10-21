@@ -88,7 +88,6 @@ uint8_t DHT11_Read(uint8_t *nhiet_do, uint8_t *do_am) {
             }
         }
     }
-
     //KIỂM TRA TÍNH TOÀN VẸN (CHECKSUM)
 
     //data[0] = data[0] + 1;
